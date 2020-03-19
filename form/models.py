@@ -1,7 +1,8 @@
-from django.db import models
-import boto3
-import os
 import logging
+import os
+
+import boto3
+from django.db import models
 
 STARTUP_SIGNUP_TABLE = os.environ['STARTUP_SIGNUP_TABLE']
 AWS_REGION = os.environ['AWS_REGION']
@@ -13,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 class Leads(models.Model):
-
+    
     def insert_lead(self, name, email, previewAccess):
         try:
-            dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION, aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY )
+            dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION, aws_access_key_id=AWS_ACCESS_KEY_ID, aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
             table = dynamodb.Table(STARTUP_SIGNUP_TABLE)
         except Exception as e:
             logger.error(
@@ -43,9 +44,9 @@ class Leads(models.Model):
             logger.error('New item added to database.')
         else:
             logger.error('Unknown error inserting item to database.')
-
+        
         return status
-
+    
     def send_notification(self, email):
         sns = boto3.client('sns', region_name=AWS_REGION)
         try:
@@ -55,7 +56,37 @@ class Leads(models.Model):
                 Subject='New signup',
             )
             logger.error('SNS message sent.')
-    
+        
         except Exception as e:
             logger.error(
                 'Error sending AWS SNS message: ' + (e.fmt if hasattr(e, 'fmt') else '') + ','.join(e.args))
+    
+    def get_leads(self, domain, preview):
+        try:
+            dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+            table = dynamodb.Table('gsg-signup-table')
+        except Exception as e:
+            logger.error(
+                'Error connecting to database table: ' + (e.fmt if hasattr(e, 'fmt') else '') + ','.join(e.args))
+            return None
+        expression_attribute_values = {}
+        FilterExpression = []
+        if preview:
+            expression_attribute_values[':p'] = preview
+            FilterExpression.append('preview = :p')
+        if domain:
+            expression_attribute_values[':d'] = '@' + domain
+            FilterExpression.append('contains(email, :d)')
+        if expression_attribute_values and FilterExpression:
+            response = table.scan(
+                FilterExpression=' and '.join(FilterExpression),
+                ExpressionAttributeValues=expression_attribute_values,
+            )
+        else:
+            response = table.scan(
+                ReturnConsumedCapacity='TOTAL',
+            )
+        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            return response['Items']
+        logger.error('Unknown error retrieving items from database.')
+        return None
