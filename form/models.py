@@ -7,6 +7,7 @@ STARTUP_SIGNUP_TABLE = os.environ['STARTUP_SIGNUP_TABLE']
 AWS_REGION = os.environ['AWS_REGION']
 AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
+NEW_SIGNUP_TOPIC = os.environ['NEW_SIGNUP_TOPIC']
 
 logger = logging.getLogger(__name__)
 
@@ -44,3 +45,17 @@ class Leads(models.Model):
             logger.error('Unknown error inserting item to database.')
 
         return status
+
+    def send_notification(self, email):
+        sns = boto3.client('sns', region_name=AWS_REGION)
+        try:
+            sns.publish(
+                TopicArn=NEW_SIGNUP_TOPIC,
+                Message='New signup: %s' % email,
+                Subject='New signup',
+            )
+            logger.error('SNS message sent.')
+    
+        except Exception as e:
+            logger.error(
+                'Error sending AWS SNS message: ' + (e.fmt if hasattr(e, 'fmt') else '') + ','.join(e.args))
