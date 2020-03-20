@@ -3,6 +3,7 @@ import os
 
 import boto3
 from django.db import models
+from boto3.dynamodb.conditions import Key, Attr
 
 STARTUP_SIGNUP_TABLE = os.environ['STARTUP_SIGNUP_TABLE']
 AWS_REGION = os.environ['AWS_REGION']
@@ -29,6 +30,7 @@ class Leads(models.Model):
                     'name': name,
                     'email': email,
                     'preview': previewAccess,
+                    'domainn': email.split('@')[1],
                 },
                 ReturnValues='ALL_OLD',
             )
@@ -90,3 +92,36 @@ class Leads(models.Model):
             return response['Items']
         logger.error('Unknown error retrieving items from database.')
         return None
+
+    def get_leads2(self, domain, preview):
+        try:
+            dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+            table = dynamodb.Table('gsg-signup-table')
+        except Exception as e:
+            logger.error(
+                'Error connecting to database table: ' + (e.fmt if hasattr(e, 'fmt') else '') + ','.join(e.args))
+            return None
+        expression_attribute_values = {}
+        FilterExpression = []
+        if domain:
+            expression_attribute_values[':d'] = domain
+            FilterExpression.append('domainn = :d')
+        if preview:
+            expression_attribute_values[':p'] = preview
+            FilterExpression.append('preview = :p')
+        if expression_attribute_values and FilterExpression:
+                response = table.query(
+                IndexName='domainn-index',
+                KeyConditionExpression=Key('domainn').eq(domain))
+        else:
+            response = table.scan(
+                ReturnConsumedCapacity='TOTAL',
+            )
+        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            if preview:
+                return [item for item in response['Items'] if item['preview'] == preview]
+            return response['Items']
+        logger.error('Unknown error retrieving items from database.')
+        return None
+
+

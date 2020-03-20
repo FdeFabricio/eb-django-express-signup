@@ -22,7 +22,7 @@ def search(request):
     domain = request.GET.get('domain')
     preview = request.GET.get('preview')
     leads = Leads()
-    items = leads.get_leads(domain, preview)
+    items = leads.get_leads2(domain, preview)
     if domain or preview:
         return render(request, 'search.html', {'items': items})
     else:
